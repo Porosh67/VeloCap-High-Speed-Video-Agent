@@ -35,52 +35,64 @@ You can run this project locally using Python or run the pre-built Docker image 
 The project is fully packaged into a compliant `linux/amd64` Docker container. You can pull and run it directly using the GitHub Container Registry.
 
 **1. Pull the Image:**
-```bash
+\`\`\`bash
 docker pull ghcr.io/porosh67/amd-video-agent:latest
+\`\`\`
 
-## Run the Container
+**2. Run the Container:**
 
-Ensure you have your *input* and *output* folders in your current directory, then run the following command. It will mount the local folders and pass the API key:
+Ensure you have your `input` and `output` folders in your current directory, then run the following command. It will mount the local folders and pass the API key:
 
+\`\`\`bash
 docker run --rm \
   -v $(pwd)/input:/input \
   -v $(pwd)/output:/output \
   -e FIREWORKS_API_KEY="your_actual_api_key_here" \
   ghcr.io/porosh67/amd-video-agent:latest
+\`\`\`
 
-## Option 2: Running Locally (Python)
+### Option 2: Running Locally (Python)
 
 **1. Install the required dependencies:**
 
 Ensure you have the input folder ready, then run:
 
-*pip install requests opencv-python-headless python-dotenv*
+\`\`\`bash
+pip install requests opencv-python-headless python-dotenv
+\`\`\`
 
 **2. Setup Environment Variables:**
 
-Create a .env file in the root directory and add your API key:
+Create a `.env` file in the root directory and add your API key:
 
-**FIREWORKS_API_KEY=your_actual_api_key_here**
+\`\`\`
+FIREWORKS_API_KEY=your_actual_api_key_here
+\`\`\`
 
 **3. Execute the Agent:**
 
+\`\`\`bash
 python main_code.py
+\`\`\`
 
 ## 📁 Project Structure
 
+\`\`\`
 ├── input/
-│   └── tasks.json          # Input tasks containing video URLs
+│   └── tasks.json           # Input tasks containing video URLs
 ├── output/
-│   └── results.json        # The final generated captions
-├── main_code.py            # The core agent logic and API integration
-├── Dockerfile              # Docker configuration
-├── requirements.txt        # Python dependencies
-└── README.md               # Documentation
+│   └── results.json         # The final generated captions
+├── main_code.py              # The core agent logic and API integration
+├── Dockerfile                 # Docker configuration
+├── requirements.txt           # Python dependencies
+└── README.md                  # Documentation
+\`\`\`
 
 ## 🎯 Example Output
 
 The agent strictly follows the evaluation guidelines and guarantees a pure JSON output. Here is a snippet of a successful result:
 
+\`\`\`json
 [
   {
     "task_id": "1",
@@ -92,3 +104,4 @@ The agent strictly follows the evaluation guidelines and guarantees a pure JSON 
     }
   }
 ]
+\`\`\`
