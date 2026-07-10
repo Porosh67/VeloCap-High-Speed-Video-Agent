@@ -1,0 +1,13 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "1. Generate JSON",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/main_code.py",
+            "args": ["generate_json"],
+            "console": "integratedTerminal"
+        }
+    ]
+}

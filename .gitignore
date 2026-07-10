@@ -1,0 +1,22 @@
+# --- Sensitive Data ---
+.env
+
+# --- Python & System Files ---
+__pycache__/
+*.pyc
+venv/
+env/
+.DS_Store
+Thumbs.db
+
+# --- Streamlit ---
+.streamlit/
+
+# --- Ignore Large Media (Keep only sample files if needed) ---
+Videos/
+!Videos/sample1.mp4
+!Videos/sample2.mp4
+
+# Note: We are NOT ignoring .json files, so your results will be saved!
+input/
+output/
