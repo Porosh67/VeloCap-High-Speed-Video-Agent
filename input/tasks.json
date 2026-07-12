@@ -1,0 +1,17 @@
+[
+  {
+    "task_id": "1",
+    "video_url": "https://storage.googleapis.com/amd-hackathon-clips/1860079-uhd_2560_1440_25fps.mp4",
+    "styles": ["formal", "sarcastic", "humorous_tech", "humorous_non_tech"]
+  },
+  {
+    "task_id": "2",
+    "video_url": "https://storage.googleapis.com/amd-hackathon-clips/13825391-uhd_3840_2160_30fps.mp4",
+    "styles": ["formal", "sarcastic", "humorous_tech", "humorous_non_tech"]
+  },
+  {
+    "task_id": "3",
+    "video_url": "https://storage.googleapis.com/amd-hackathon-clips/3044693-uhd_3840_2160_24fps.mp4",
+    "styles": ["formal", "sarcastic", "humorous_tech", "humorous_non_tech"]
+  }
+]

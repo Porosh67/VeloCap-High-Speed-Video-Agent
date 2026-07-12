@@ -18,5 +18,4 @@ Videos/
 !Videos/sample2.mp4
 
 # Note: We are NOT ignoring .json files, so your results will be saved!
-input/
 output/
