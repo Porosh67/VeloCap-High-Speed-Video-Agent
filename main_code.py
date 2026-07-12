@@ -42,15 +42,41 @@ VISION_MODEL = os.getenv("VISION_MODEL", "accounts/fireworks/models/minimax-m3")
 NUM_FRAMES = int(os.getenv("NUM_FRAMES", "24"))
 FRAME_SIZE = (640, 360)
 JPEG_QUALITY = 78
-MAX_WORKERS = int(os.getenv("MAX_WORKERS", "3"))
+# Raised default from 3 -> 5: with up to 12 hidden clips, more concurrent
+# workers reduces total wall-clock as long as the API can absorb it. Safe
+# to tune down via env var if the API starts rate-limiting.
+MAX_WORKERS = int(os.getenv("MAX_WORKERS", "5"))
+# Request timeout trimmed from 90s -> 45s. A single caption call for 24
+# small frames does not need 90s; a hung call now fails into retry twice
+# as fast instead of eating a third of the 10-minute budget on one stall.
+REQUEST_TIMEOUT = int(os.getenv("REQUEST_TIMEOUT", "45"))
 
 DEFAULT_STYLES = ["formal", "sarcastic", "humorous_tech", "humorous_non_tech"]
 
+# Per-style guidance, actually injected into the prompt (previous version
+# built this into a `style_lines` string that was never used — the model
+# was only ever shown the bare style *names*, which was the single biggest
+# lever on style-match and accuracy scores).
 STYLE_GUIDE = {
-    "formal": "Professional, objective, factual tone.",
-    "sarcastic": "Dry, ironic, lightly mocking tone.",
-    "humorous_tech": "Funny, weaving in technology or programming references.",
-    "humorous_non_tech": "Funny, everyday humour with no technical jargon.",
+    "formal": (
+        "Professional, objective, factual tone. Third-person, precise nouns, "
+        "no jokes, no opinions. Describe setting, subjects, and actions the "
+        "way a museum placard or news caption would."
+    ),
+    "sarcastic": (
+        "Dry, ironic, lightly mocking wit — but still clearly describing what "
+        "is actually happening in the video. The irony should come from *how* "
+        "it's said, not from inventing unrelated content."
+    ),
+    "humorous_tech": (
+        "Genuinely funny, weaving in specific technology, programming, or "
+        "engineering references (e.g. threading, APIs, rendering, bugs) as "
+        "the source of the joke — not just funny in general."
+    ),
+    "humorous_non_tech": (
+        "Genuinely funny, everyday relatable humor with zero technical "
+        "jargon — the kind of joke a non-technical friend would find funny."
+    ),
 }
 
 # Download session
@@ -175,24 +201,67 @@ def extract_frames(video_url, num_frames, task_id):
     return frames
 
 
+def _normalize_for_dup_check(text):
+    text = text.strip().lower()
+    text = re.sub(r'[^\w\s]', '', text)
+    text = re.sub(r'\s+', ' ', text)
+    return text
+
+
+def _word_overlap_ratio(a, b):
+    wa, wb = set(a.split()), set(b.split())
+    if not wa or not wb:
+        return 0.0
+    return len(wa & wb) / min(len(wa), len(wb))
+
+
 def _captions_valid(parsed, styles):
     if not isinstance(parsed, dict):
         return False
-    if not all(s in parsed and isinstance(parsed[s], str) and len(parsed[s].split()) >= 4 for s in styles):
+
+    for s in styles:
+        val = parsed.get(s)
+        if not isinstance(val, str):
+            return False
+        if len(val.split()) < 8:
+            return False
+
+    normalized = {s: _normalize_for_dup_check(parsed[s]) for s in styles}
+
+    if len(set(normalized.values())) < len(styles):
         return False
-    values = [parsed[s].strip().lower() for s in styles]
-    if len(set(values)) < len(values):
-        return False
+
+    style_list = list(styles)
+    for i in range(len(style_list)):
+        for j in range(i + 1, len(style_list)):
+            if _word_overlap_ratio(normalized[style_list[i]], normalized[style_list[j]]) > 0.75:
+                return False
+
     return True
 
 
 def generate_captions(frames, styles, task_id):
-    style_lines = "\n".join(f"- {s}: {STYLE_GUIDE.get(s, 'Distinct tone.')}" for s in styles)
+    style_block = "\n".join(
+        f'- "{s}": {STYLE_GUIDE.get(s, "Distinct, clearly identifiable tone.")}'
+        for s in styles
+    )
+
     prompt_text = (
-        "You are an expert video caption generator. Analyze the scene, "
-        "actions, emotions, and context carefully across these frames. "
+        "You are an expert video captioner. You are shown a sequence of "
+        f"{len(frames)} frames sampled evenly across one video clip, in "
+        "chronological order — treat them as a single continuous scene, not "
+        "separate images.\n\n"
+        "Write ONE caption per requested style below. Every caption must:\n"
+        "- Accurately reflect what is actually visible across the frames "
+        "(subjects, setting, actions, notable changes over time)\n"
+        "- Clearly sound like its assigned style — a reader should be able "
+        "to tell the styles apart without seeing the labels\n"
+        "- Be 2-3 full sentences (roughly 25-45 words)\n"
+        "- Be genuinely distinct from the other styles — do not reuse the "
+        "same sentence structure, jokes, or phrasing across styles\n\n"
+        f"Styles to produce:\n{style_block}\n\n"
         f"Return a valid JSON object with EXACT keys: {json.dumps(styles)}. "
-        "Return ONLY the JSON object, no preamble."
+        "Return ONLY the JSON object, no preamble, no markdown fences."
     )
 
     content_list = [{"type": "text", "text": prompt_text}]
@@ -201,21 +270,30 @@ def generate_captions(frames, styles, task_id):
 
     payload = {
         "model": VISION_MODEL,
-        "max_tokens": 1200,
-        "temperature": 0.6,
+        # Trimmed from 1200 -> 900: still comfortably covers 4 captions at
+        # ~45 words each (roughly 350-450 tokens of actual content), but
+        # gives the API less headroom to ramble, which cuts response time.
+        "max_tokens": 900,
+        "temperature": 0.5,
         "response_format": {"type": "json_object"},
         "messages": [{"role": "user", "content": content_list}],
     }
 
     for attempt in range(3):
         try:
-            content = call_fireworks(payload, timeout=90)
+            content = call_fireworks(payload, timeout=REQUEST_TIMEOUT)
             parsed = json.loads(extract_json_object(content))
             if _captions_valid(parsed, styles):
                 return parsed
+            logger.warning(f"Task {task_id}: attempt {attempt + 1} produced invalid/too-similar captions, retrying.")
         except Exception as e:
             logger.warning(f"Task {task_id}: attempt {attempt + 1} failed: {e}")
-        time.sleep(1.5 * (attempt + 1) + random.random())
+        # Backoff shortened: 1.5*(n+1)+jitter (up to ~9s by attempt 3) was
+        # pure dead time on top of the API call itself. 0.6*(n+1)+small
+        # jitter still spaces out retries enough to dodge transient
+        # rate-limits, but a full retry cycle now costs seconds, not
+        # a double-digit chunk of the runtime budget.
+        time.sleep(0.6 * (attempt + 1) + random.random() * 0.4)
 
     return {s: "Analysis failed after retries." for s in styles}
 
@@ -267,11 +345,6 @@ def main():
 
     with ThreadPoolExecutor(max_workers=workers) as executor:
         future_to_index = {executor.submit(process_single_task, task): i for i, task in enumerate(tasks)}
-        # FIX: use as_completed() instead of iterating the dict directly.
-        # Iterating `future_to_index` walks futures in SUBMIT order, so
-        # `.result()` blocks on task #0 even if task #2 finished first —
-        # this silently serializes the whole pool. as_completed() yields
-        # each future as soon as it's actually done, so all workers stay busy.
         for future in as_completed(future_to_index):
             idx = future_to_index[future]
             try:
