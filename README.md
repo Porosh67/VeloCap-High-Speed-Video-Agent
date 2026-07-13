@@ -32,7 +32,7 @@ To keep the agent lightweight and blazing fast, we strategically used the follow
 
 ## 🚀 How to Run the Project
 
-You can run this project locally using Python or run the pre-built Docker image directly.
+You can run this project locally using Python directly.
 
 ### Recommended: Running Locally (Python)
 
