@@ -34,28 +34,7 @@ To keep the agent lightweight and blazing fast, we strategically used the follow
 
 You can run this project locally using Python or run the pre-built Docker image directly.
 
-### Option 1: Running via Docker (Hackathon Compliant & Recommended)
-
-The project is fully packaged into a compliant `linux/amd64` Docker container. You can pull and run it directly using the GitHub Container Registry.
-
-**1. Pull the Image:**
-```bash
-docker pull ghcr.io/porosh67/amd-video-agent:latest
-```
-
-**2. Run the Container:**
-
-Ensure you have your `input` and `output` folders in your current directory, then run the following command. It mounts the local folders and passes the API key in at runtime (the key is **not** baked into the image):
-
-```bash
-docker run --rm \
-  -v $(pwd)/input:/input \
-  -v $(pwd)/output:/output \
-  -e FIREWORKS_API_KEY="your_actual_api_key_here" \
-  ghcr.io/porosh67/amd-video-agent:latest
-```
-
-### Option 2: Running Locally (Python)
+### Recommended: Running Locally (Python)
 
 **1. Install the required dependencies:**
 
